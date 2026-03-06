@@ -108,20 +108,9 @@ void IRCCore::cmdPart(Session& sess, const std::string& args)
 			reason = reason.substr(1);
 	}
 
-	std::map<std::string, Room*>::iterator it = _rooms.find(roomLabel);
-	if (it == _rooms.end())
-	{
-		replyNumeric(sess, "403", roomLabel + " :No such channel");
+	Room* room = requireRoom(sess, roomLabel, false);
+	if (!room)
 		return;
-	}
-
-	Room* room = it->second;
-
-	if (!room->hasUser(&sess))
-	{
-		replyNumeric(sess, "442", roomLabel + " :You're not on that channel");
-		return;
-	}
 
 	std::string partLine = buildPrefix(sess) + " PART " + roomLabel;
 	if (!reason.empty())
@@ -133,8 +122,8 @@ void IRCCore::cmdPart(Session& sess, const std::string& args)
 
 	if (room->getUserList().empty())
 	{
+		_rooms.erase(roomLabel);
 		delete room;
-		_rooms.erase(it);
 		std::cout << "[CHANNEL] Deleted: " << roomLabel << std::endl;
 	}
 

@@ -36,25 +36,9 @@ void IRCCore::cmdKick(Session& sess, const std::string& args)
 			reason = reason.substr(1);
 	}
 
-	std::map<std::string, Room*>::iterator it = _rooms.find(roomLabel);
-	if (it == _rooms.end())
-	{
-		replyNumeric(sess, "403", roomLabel + " :No such channel");
+	Room* room = requireRoom(sess, roomLabel, true);
+	if (!room)
 		return;
-	}
-
-	Room* room = it->second;
-
-	if (!room->hasUser(&sess))
-	{
-		replyNumeric(sess, "442", roomLabel + " :You're not on that channel");
-		return;
-	}
-	if (!room->isAdmin(&sess))
-	{
-		replyNumeric(sess, "482", roomLabel + " :You're not channel operator");
-		return;
-	}
 
 	Session* target = locateByNick(targetNick);
 	if (!target)
@@ -77,8 +61,8 @@ void IRCCore::cmdKick(Session& sess, const std::string& args)
 
 	if (room->getUserList().empty())
 	{
+		_rooms.erase(roomLabel);
 		delete room;
-		_rooms.erase(it);
 	}
 
 	std::cout << "[KICK] " << sess.getNick() << " kicked "
@@ -102,25 +86,9 @@ void IRCCore::cmdInvite(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::map<std::string, Room*>::iterator it = _rooms.find(roomLabel);
-	if (it == _rooms.end())
-	{
-		replyNumeric(sess, "403", roomLabel + " :No such channel");
+	Room* room = requireRoom(sess, roomLabel, true);
+	if (!room)
 		return;
-	}
-
-	Room* room = it->second;
-
-	if (!room->hasUser(&sess))
-	{
-		replyNumeric(sess, "442", roomLabel + " :You're not on that channel");
-		return;
-	}
-	if (!room->isAdmin(&sess))
-	{
-		replyNumeric(sess, "482", roomLabel + " :You're not channel operator");
-		return;
-	}
 
 	Session* dest = locateByNick(nick);
 	if (!dest)
@@ -168,20 +136,9 @@ void IRCCore::cmdTopic(Session& sess, const std::string& args)
 			newSubject = newSubject.substr(1);
 	}
 
-	std::map<std::string, Room*>::iterator it = _rooms.find(roomLabel);
-	if (it == _rooms.end())
-	{
-		replyNumeric(sess, "403", roomLabel + " :No such channel");
+	Room* room = requireRoom(sess, roomLabel, false);
+	if (!room)
 		return;
-	}
-
-	Room* room = it->second;
-
-	if (!room->hasUser(&sess))
-	{
-		replyNumeric(sess, "442", roomLabel + " :You're not on that channel");
-		return;
-	}
 
 	if (!hasSubject)
 	{
@@ -227,20 +184,9 @@ void IRCCore::cmdMode(Session& sess, const std::string& args)
 	{
 		if (target[0] == '#')
 		{
-			std::map<std::string, Room*>::iterator it = _rooms.find(target);
-			if (it == _rooms.end())
-			{
-				replyNumeric(sess, "403", target + " :No such channel");
+			Room* room = requireRoom(sess, target, false);
+			if (!room)
 				return;
-			}
-
-			Room* room = it->second;
-			if (!room->hasUser(&sess))
-			{
-				replyNumeric(sess, "442",
-					target + " :You're not on that channel");
-				return;
-			}
 
 			std::string flags = "+";
 			std::string extra = "";
@@ -275,25 +221,9 @@ void IRCCore::cmdMode(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::map<std::string, Room*>::iterator it = _rooms.find(target);
-	if (it == _rooms.end())
-	{
-		replyNumeric(sess, "403", target + " :No such channel");
+	Room* room = requireRoom(sess, target, true);
+	if (!room)
 		return;
-	}
-
-	Room* room = it->second;
-
-	if (!room->hasUser(&sess))
-	{
-		replyNumeric(sess, "442", target + " :You're not on that channel");
-		return;
-	}
-	if (!room->isAdmin(&sess))
-	{
-		replyNumeric(sess, "482", target + " :You're not channel operator");
-		return;
-	}
 
 	std::vector<std::string> modeArgs;
 	std::string tok;

@@ -74,6 +74,28 @@ Session* IRCCore::locateByNick(const std::string& nick)
 	return NULL;
 }
 
+Room* IRCCore::requireRoom(Session& sess, const std::string& label, bool needOp)
+{
+	std::map<std::string, Room*>::iterator it = _rooms.find(label);
+	if (it == _rooms.end())
+	{
+		replyNumeric(sess, "403", label + " :No such channel");
+		return NULL;
+	}
+	Room* room = it->second;
+	if (!room->hasUser(&sess))
+	{
+		replyNumeric(sess, "442", label + " :You're not on that channel");
+		return NULL;
+	}
+	if (needOp && !room->isAdmin(&sess))
+	{
+		replyNumeric(sess, "482", label + " :You're not channel operator");
+		return NULL;
+	}
+	return room;
+}
+
 void IRCCore::purgeFromRooms(Session* sess)
 {
 	for (std::map<std::string, Room*>::iterator it = _rooms.begin();

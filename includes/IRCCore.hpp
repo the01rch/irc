@@ -46,6 +46,7 @@ class IRCCore {
         // Lookup
         Session* locateByNick(const std::string& nick);
         void purgeFromRooms(Session* sess);
+        Room* requireRoom(Session& sess, const std::string& label, bool needOp);
 
         // Command dispatcher
         void dispatch(Session& sess, const std::string& line);
