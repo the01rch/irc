@@ -1,6 +1,7 @@
 #include "IRCCore.hpp"
 #include <iostream>
 #include <cctype>
+#include <sstream>
 
 void IRCCore::cmdPass(Session& sess, const std::string& args)
 {
@@ -108,15 +109,19 @@ void IRCCore::cmdUser(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::string user = args;
-	size_t sp = user.find(' ');
-	if (sp != std::string::npos)
-		user = user.substr(0, sp);
+	std::istringstream iss(args);
+    std::string username, mode, unused;
+    
+    if (!(iss >> username >> mode >> unused))
+    {
+        replyNumeric(sess, "461", "USER :Not enough parameters");
+        return;
+    }
+    
+    sess.setUser(username);
+    std::cout << "[USER] FD " << sess.getSocket() << ": " << username << std::endl;
 
-	sess.setUser(user);
-	std::cout << "[USER] FD " << sess.getSocket() << ": " << user << std::endl;
-
-	tryFinalize(sess);
+    tryFinalize(sess);
 }
 
 void IRCCore::tryFinalize(Session& sess)

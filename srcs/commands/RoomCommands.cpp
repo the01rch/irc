@@ -1,5 +1,6 @@
 #include "IRCCore.hpp"
 #include <iostream>
+#include <sstream>
 
 void IRCCore::cmdJoin(Session& sess, const std::string& args)
 {
@@ -129,4 +130,63 @@ void IRCCore::cmdPart(Session& sess, const std::string& args)
 
 	std::cout << "[PART] " << sess.getNick() << " left "
 		<< roomLabel << std::endl;
+}
+
+void IRCCore::cmdNames(Session& sess, const std::string& args)
+{
+    std::string roomLabel = args;
+    
+    if (!roomLabel.empty() && roomLabel[0] == ':')
+        roomLabel = roomLabel.substr(1);
+
+    if (roomLabel.empty())
+    {
+        replyNumeric(sess, "461", "NAMES :Not enough parameters");
+        return;
+    }
+
+    Room* room = requireRoom(sess, roomLabel, false);
+    if (!room)
+        return;
+
+    std::string namesList = "";
+    std::vector<Session*>& users = room->getUserList();
+    for (size_t i = 0; i < users.size(); ++i)
+    {
+        if (i > 0)
+            namesList += " ";
+        if (room->isAdmin(users[i]))
+            namesList += "@";
+        namesList += users[i]->getNick();
+    }
+
+    replyNumeric(sess, "353", "= " + roomLabel + " :" + namesList);
+    replyNumeric(sess, "366", roomLabel + " :End of /NAMES list");
+}
+
+void IRCCore::cmdList(Session& sess, const std::string& args)
+{
+    (void)args;
+
+    replyNumeric(sess, "321", "Channel :Users  Name");
+
+    for (std::map<std::string, Room*>::iterator it = _rooms.begin();
+        it != _rooms.end(); ++it)
+    {
+        Room* room = it->second;
+        
+        std::ostringstream oss;
+        oss << room->getUserList().size();
+        
+        std::string info = it->first + " " + oss.str();
+        
+        if (!room->getSubject().empty())
+            info += " :" + room->getSubject();
+        else
+            info += " :";
+
+        replyNumeric(sess, "322", info);
+    }
+
+    replyNumeric(sess, "323", ":End of /LIST");
 }

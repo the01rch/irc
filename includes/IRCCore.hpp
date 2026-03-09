@@ -61,6 +61,8 @@ class IRCCore {
         // Room commands
         void cmdJoin(Session& sess, const std::string& args);
         void cmdPart(Session& sess, const std::string& args);
+        void cmdNames(Session& sess, const std::string& args);
+        void cmdList(Session& sess, const std::string& args);
 
         // Messaging
         void cmdPrivmsg(Session& sess, const std::string& args);

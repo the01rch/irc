@@ -39,6 +39,12 @@ void IRCCore::dispatch(Session& sess, const std::string& line)
 		cmdMode(sess, args);
 	else if (verb == "PING")
 		cmdPing(sess, args);
+	else if (verb == "NAMES")
+		cmdNames(sess, args);
+	else if (verb == "LIST")
+		cmdList(sess, args);
+	else if (verb == "USERHOST" || verb == "WHO" || verb == "WHOIS")
+        ;
 	else
 		replyNumeric(sess, "421", verb + " :Unknown command");
 }

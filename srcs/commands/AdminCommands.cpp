@@ -180,6 +180,11 @@ void IRCCore::cmdMode(Session& sess, const std::string& args)
 		return;
 	}
 
+	if (target[0] != '#')
+    {
+        return;
+    }
+
 	if (!(iss >> modeStr))
 	{
 		if (target[0] == '#')
@@ -212,12 +217,6 @@ void IRCCore::cmdMode(Session& sess, const std::string& args)
 			return;
 		}
 		replyNumeric(sess, "461", "MODE :Not enough parameters");
-		return;
-	}
-
-	if (target[0] != '#')
-	{
-		replyNumeric(sess, "501", ":Unknown MODE flag");
 		return;
 	}
 
