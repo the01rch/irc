@@ -1,4 +1,16 @@
 #include "IRCCore.hpp"
+#include <sstream>
+
+static std::vector<std::string> splitComma(const std::string& s)
+{
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream stream(s);
+	while (std::getline(stream, token, ','))
+		if (!token.empty())
+			tokens.push_back(token);
+	return tokens;
+}
 
 void IRCCore::cmdPrivmsg(Session& sess, const std::string& args)
 {
@@ -8,12 +20,12 @@ void IRCCore::cmdPrivmsg(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::string target = args;
+	std::string targetGroup = args;
 	std::string body = "";
 	size_t sp = args.find(' ');
 	if (sp != std::string::npos)
 	{
-		target = args.substr(0, sp);
+		targetGroup = args.substr(0, sp);
 		body = args.substr(sp + 1);
 		if (!body.empty() && body[0] == ':')
 			body = body.substr(1);
@@ -25,36 +37,44 @@ void IRCCore::cmdPrivmsg(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::string fullMsg = buildPrefix(sess)
-		+ " PRIVMSG " + target + " :" + body + "\r\n";
+	std::vector<std::string> targets = splitComma(targetGroup);
 
-	if (target[0] == '#')
+	for (size_t i = 0; i < targets.size(); ++i)
 	{
-		std::map<std::string, Room*>::iterator it = _rooms.find(target);
-		if (it == _rooms.end())
-		{
-			replyNumeric(sess, "403", target + " :No such channel");
-			return;
-		}
+		const std::string& target = targets[i];
+		std::string fullMsg = buildPrefix(sess)
+			+ " PRIVMSG " + target + " :" + body + "\r\n";
 
-		Room* room = it->second;
-
-		if (!room->hasUser(&sess))
+		if (target[0] == '#')
 		{
-			replyNumeric(sess, "442", target + " :You're not on that channel");
-			return;
-		}
+			std::map<std::string, Room*>::iterator it = _rooms.find(target);
+			if (it == _rooms.end())
+			{
+				replyNumeric(sess, "403", target + " :No such channel");
+				continue;
+			}
 
-		room->relay(fullMsg, &sess);
-	}
-	else
-	{
-		Session* dest = locateByNick(target);
-		if (!dest)
-		{
-			replyNumeric(sess, "401", target + " :No such nick/channel");
-			return;
+			Room* room = it->second;
+
+			if (!room->hasUser(&sess))
+			{
+				replyNumeric(sess, "442", target + " :You're not on that channel");
+				continue;
+			}
+
+			room->relay(fullMsg, &sess);
 		}
-		enqueueReply(*dest, fullMsg);
+		else
+		{
+			Session* dest = locateByNick(target);
+			if (!dest)
+			{
+				replyNumeric(sess, "401", target + " :No such nick/channel");
+				continue;
+			}
+			enqueueReply(*dest, fullMsg);
+			enqueueReply(sess, fullMsg);
+		}
 	}
 }
+

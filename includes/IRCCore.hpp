@@ -59,6 +59,8 @@ class IRCCore {
         void cmdQuit(Session& sess, const std::string& args);
 
         // Room commands
+        void joinOneChannel(Session& sess, const std::string& roomLabel,
+                           const std::string& passphrase);
         void cmdJoin(Session& sess, const std::string& args);
         void cmdPart(Session& sess, const std::string& args);
         void cmdNames(Session& sess, const std::string& args);
@@ -72,6 +74,10 @@ class IRCCore {
         void cmdInvite(Session& sess, const std::string& args);
         void cmdTopic(Session& sess, const std::string& args);
         void cmdMode(Session& sess, const std::string& args);
+        void showChannelModes(Session& sess, const std::string& target);
+        void applyChannelModes(Session& sess, const std::string& target,
+                              const std::string& modeStr,
+                              const std::vector<std::string>& modeArgs);
 
         // Utility
         void cmdPing(Session& sess, const std::string& args);

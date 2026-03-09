@@ -3,6 +3,17 @@
 #include <sstream>
 #include <cstdlib>
 
+static std::vector<std::string> splitComma(const std::string& s)
+{
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream stream(s);
+	while (std::getline(stream, token, ','))
+		if (!token.empty())
+			tokens.push_back(token);
+	return tokens;
+}
+
 void IRCCore::cmdKick(Session& sess, const std::string& args)
 {
 	if (args.empty())
@@ -12,11 +23,11 @@ void IRCCore::cmdKick(Session& sess, const std::string& args)
 	}
 
 	std::string rest = args;
-	std::string roomLabel = "";
+	std::string chanGroup = "";
 	size_t sp = rest.find(' ');
 	if (sp != std::string::npos)
 	{
-		roomLabel = rest.substr(0, sp);
+		chanGroup = rest.substr(0, sp);
 		rest = rest.substr(sp + 1);
 	}
 	else
@@ -25,48 +36,60 @@ void IRCCore::cmdKick(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::string targetNick = rest;
+	std::string nickGroup = rest;
 	std::string reason = sess.getNick();
 	sp = rest.find(' ');
 	if (sp != std::string::npos)
 	{
-		targetNick = rest.substr(0, sp);
+		nickGroup = rest.substr(0, sp);
 		reason = rest.substr(sp + 1);
 		if (!reason.empty() && reason[0] == ':')
 			reason = reason.substr(1);
 	}
 
-	Room* room = requireRoom(sess, roomLabel, true);
-	if (!room)
-		return;
+	std::vector<std::string> chans = splitComma(chanGroup);
+	std::vector<std::string> nicks = splitComma(nickGroup);
 
-	Session* target = locateByNick(targetNick);
-	if (!target)
+	for (size_t i = 0; i < chans.size(); ++i)
 	{
-		replyNumeric(sess, "401", targetNick + " :No such nick/channel");
-		return;
+		Room* room = requireRoom(sess, chans[i], true);
+		if (!room)
+			continue;
+
+		for (size_t j = 0; j < nicks.size(); ++j)
+		{
+			Session* target = locateByNick(nicks[j]);
+			if (!target)
+			{
+				replyNumeric(sess, "401", nicks[j] + " :No such nick/channel");
+				continue;
+			}
+			if (!room->hasUser(target))
+			{
+				replyNumeric(sess, "441",
+					nicks[j] + " " + chans[i] + " :They aren't on that channel");
+				continue;
+			}
+
+			std::string kickLine = buildPrefix(sess) + " KICK " + chans[i]
+				+ " " + nicks[j] + " :" + reason + "\r\n";
+			room->relayAll(kickLine);
+
+			room->eraseUser(target);
+
+			if (room->getUserList().empty())
+			{
+				_rooms.erase(chans[i]);
+				delete room;
+				room = NULL;
+				std::cout << "[CHANNEL] Deleted: " << chans[i] << std::endl;
+				break;
+			}
+
+			std::cout << "[KICK] " << sess.getNick() << " kicked "
+				<< nicks[j] << " from " << chans[i] << std::endl;
+		}
 	}
-	if (!room->hasUser(target))
-	{
-		replyNumeric(sess, "441",
-			targetNick + " " + roomLabel + " :They aren't on that channel");
-		return;
-	}
-
-	std::string kickLine = buildPrefix(sess) + " KICK " + roomLabel
-		+ " " + targetNick + " :" + reason + "\r\n";
-	room->relayAll(kickLine);
-
-	room->eraseUser(target);
-
-	if (room->getUserList().empty())
-	{
-		_rooms.erase(roomLabel);
-		delete room;
-	}
-
-	std::cout << "[KICK] " << sess.getNick() << " kicked "
-		<< targetNick << " from " << roomLabel << std::endl;
 }
 
 void IRCCore::cmdInvite(Session& sess, const std::string& args)
@@ -168,66 +191,42 @@ void IRCCore::cmdTopic(Session& sess, const std::string& args)
 	}
 }
 
-void IRCCore::cmdMode(Session& sess, const std::string& args)
+void IRCCore::showChannelModes(Session& sess, const std::string& target)
 {
-	std::istringstream iss(args);
-	std::string target;
-	std::string modeStr;
-
-	if (!(iss >> target))
-	{
-		replyNumeric(sess, "461", "MODE :Not enough parameters");
-		return;
-	}
-
-	if (target[0] != '#')
-    {
-        return;
-    }
-
-	if (!(iss >> modeStr))
-	{
-		if (target[0] == '#')
-		{
-			Room* room = requireRoom(sess, target, false);
-			if (!room)
-				return;
-
-			std::string flags = "+";
-			std::string extra = "";
-
-			if (room->isRestricted())
-				flags += "i";
-			if (room->hasLockedSubject())
-				flags += "t";
-			if (!room->getPassphrase().empty())
-			{
-				flags += "k";
-				extra += " " + room->getPassphrase();
-			}
-			if (room->getMaxUsers() > 0)
-			{
-				flags += "l";
-				std::ostringstream oss;
-				oss << room->getMaxUsers();
-				extra += " " + oss.str();
-			}
-
-			replyNumeric(sess, "324", target + " " + flags + extra);
-			return;
-		}
-		replyNumeric(sess, "461", "MODE :Not enough parameters");
-		return;
-	}
-
-	Room* room = requireRoom(sess, target, true);
+	Room* room = requireRoom(sess, target, false);
 	if (!room)
 		return;
 
-	std::vector<std::string> modeArgs;
-	std::string tok;
-	while (iss >> tok)
-		modeArgs.push_back(tok);
+	std::string flags = "+";
+	std::string extra = "";
+
+	if (room->isRestricted())
+		flags += "i";
+	if (room->hasLockedSubject())
+		flags += "t";
+	if (!room->getPassphrase().empty())
+	{
+		flags += "k";
+		extra += " " + room->getPassphrase();
+	}
+	if (room->getMaxUsers() > 0)
+	{
+		flags += "l";
+		std::ostringstream oss;
+		oss << room->getMaxUsers();
+		extra += " " + oss.str();
+	}
+
+	replyNumeric(sess, "324", target + " " + flags + extra);
+}
+
+void IRCCore::applyChannelModes(Session& sess, const std::string& target, 
+	const std::string& modeStr, 
+	const std::vector<std::string>& modeArgs)
+{
+	Room* room = requireRoom(sess, target, true);
+	if (!room)
+		return;
 
 	bool adding = true;
 	size_t argIdx = 0;
@@ -258,118 +257,118 @@ void IRCCore::cmdMode(Session& sess, const std::string& args)
 
 		switch (c)
 		{
-		case 'i':
-			room->toggleRestricted(adding);
-			applied += 'i';
-			anyValid = true;
-			break;
+			case 'i':
+				room->toggleRestricted(adding);
+				applied += 'i';
+				anyValid = true;
+				break;
 
-		case 't':
-			room->toggleLockedSubject(adding);
-			applied += 't';
-			anyValid = true;
-			break;
+			case 't':
+				room->toggleLockedSubject(adding);
+				applied += 't';
+				anyValid = true;
+				break;
 
-		case 'k':
-		{
-			if (adding)
+			case 'k':
+			{
+				if (adding)
+				{
+					if (argIdx >= modeArgs.size())
+					{
+						replyNumeric(sess, "461",
+							"MODE +k :Not enough parameters");
+						continue;
+					}
+					std::string key = modeArgs[argIdx++];
+					room->changePassphrase(key);
+					applied += 'k';
+					appliedArgs += " " + key;
+				}
+				else
+				{
+					room->changePassphrase("");
+					applied += 'k';
+				}
+				anyValid = true;
+				break;
+			}
+
+			case 'o':
 			{
 				if (argIdx >= modeArgs.size())
 				{
 					replyNumeric(sess, "461",
-						"MODE +k :Not enough parameters");
+						"MODE +o :Not enough parameters");
 					continue;
 				}
-				std::string key = modeArgs[argIdx++];
-				room->changePassphrase(key);
-				applied += 'k';
-				appliedArgs += " " + key;
-			}
-			else
-			{
-				room->changePassphrase("");
-				applied += 'k';
-			}
-			anyValid = true;
-			break;
-		}
 
-		case 'o':
-		{
-			if (argIdx >= modeArgs.size())
-			{
-				replyNumeric(sess, "461",
-					"MODE +o :Not enough parameters");
-				continue;
-			}
+				std::string who = modeArgs[argIdx++];
+				Session* tgt = locateByNick(who);
 
-			std::string who = modeArgs[argIdx++];
-			Session* tgt = locateByNick(who);
-
-			if (!tgt)
-			{
-				replyNumeric(sess, "401",
-					who + " :No such nick/channel");
-				continue;
-			}
-			if (!room->hasUser(tgt))
-			{
-				replyNumeric(sess, "441",
-					who + " " + target
-					+ " :They aren't on that channel");
-				continue;
-			}
-
-			if (adding)
-				room->promoteAdmin(tgt);
-			else
-				room->demoteAdmin(tgt);
-
-			applied += 'o';
-			appliedArgs += " " + who;
-			anyValid = true;
-			break;
-		}
-
-		case 'l':
-		{
-			if (adding)
-			{
-				if (argIdx >= modeArgs.size())
+				if (!tgt)
 				{
-					replyNumeric(sess, "461",
-						"MODE +l :Not enough parameters");
+					replyNumeric(sess, "401",
+						who + " :No such nick/channel");
 					continue;
 				}
-
-				std::string limStr = modeArgs[argIdx++];
-				int lim = std::atoi(limStr.c_str());
-
-				if (lim <= 0)
+				if (!room->hasUser(tgt))
 				{
-					replyNumeric(sess, "461",
-						"MODE +l :Invalid user limit");
+					replyNumeric(sess, "441",
+						who + " " + target
+						+ " :They aren't on that channel");
 					continue;
 				}
 
-				room->setMaxUsers(lim);
-				applied += 'l';
-				appliedArgs += " " + limStr;
-			}
-			else
-			{
-				room->setMaxUsers(0);
-				applied += 'l';
-			}
-			anyValid = true;
-			break;
-		}
+				if (adding)
+					room->promoteAdmin(tgt);
+				else
+					room->demoteAdmin(tgt);
 
-		default:
-			replyNumeric(sess, "472",
-				std::string(1, c) + " :is unknown mode char to me");
-			continue;
-		}
+				applied += 'o';
+				appliedArgs += " " + who;
+				anyValid = true;
+				break;
+			}
+
+			case 'l':
+			{
+				if (adding)
+				{
+					if (argIdx >= modeArgs.size())
+					{
+						replyNumeric(sess, "461",
+							"MODE +l :Not enough parameters");
+						continue;
+					}
+
+					std::string limStr = modeArgs[argIdx++];
+					int lim = std::atoi(limStr.c_str());
+
+					if (lim <= 0)
+					{
+						replyNumeric(sess, "461",
+							"MODE +l :Invalid user limit");
+						continue;
+					}
+
+					room->setMaxUsers(lim);
+					applied += 'l';
+					appliedArgs += " " + limStr;
+				}
+				else
+				{
+					room->setMaxUsers(0);
+					applied += 'l';
+				}
+				anyValid = true;
+				break;
+			}
+
+			default:
+				replyNumeric(sess, "472",
+					std::string(1, c) + " :is unknown mode char to me");
+				continue;
+			}
 	}
 
 	if (anyValid && !applied.empty())
@@ -380,4 +379,35 @@ void IRCCore::cmdMode(Session& sess, const std::string& args)
 		std::cout << "[MODE] " << sess.getNick() << " set mode "
 			<< applied << appliedArgs << " on " << target << std::endl;
 	}
+}
+
+void IRCCore::cmdMode(Session& sess, const std::string& args)
+{
+	std::istringstream iss(args);
+	std::string target;
+	std::string modeStr;
+
+	if (!(iss >> target))
+	{
+		replyNumeric(sess, "461", "MODE :Not enough parameters");
+		return;
+	}
+
+	if (target[0] != '#')
+	{
+		return;
+	}
+
+	if (!(iss >> modeStr))
+	{
+		showChannelModes(sess, target);
+		return;
+	}
+
+	std::vector<std::string> modeArgs;
+	std::string tok;
+	while (iss >> tok)
+		modeArgs.push_back(tok);
+
+	applyChannelModes(sess, target, modeStr, modeArgs);
 }

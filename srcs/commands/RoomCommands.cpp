@@ -2,23 +2,20 @@
 #include <iostream>
 #include <sstream>
 
-void IRCCore::cmdJoin(Session& sess, const std::string& args)
+static std::vector<std::string> splitComma(const std::string& s)
 {
-	if (args.empty())
-	{
-		replyNumeric(sess, "461", "JOIN :Not enough parameters");
-		return;
-	}
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream stream(s);
+	while (std::getline(stream, token, ','))
+		if (!token.empty())
+			tokens.push_back(token);
+	return tokens;
+}
 
-	std::string roomLabel = args;
-	std::string passphrase = "";
-	size_t sp = args.find(' ');
-	if (sp != std::string::npos)
-	{
-		roomLabel = args.substr(0, sp);
-		passphrase = args.substr(sp + 1);
-	}
-
+void IRCCore::joinOneChannel(Session& sess, const std::string& roomLabel,
+								const std::string& passphrase)
+{
 	if (roomLabel.empty() || roomLabel[0] != '#')
 	{
 		replyNumeric(sess, "476", roomLabel + " :Bad Channel Mask");
@@ -90,6 +87,28 @@ void IRCCore::cmdJoin(Session& sess, const std::string& args)
 		<< roomLabel << std::endl;
 }
 
+void IRCCore::cmdJoin(Session& sess, const std::string& args)
+{
+	if (args.empty())
+	{
+		replyNumeric(sess, "461", "JOIN :Not enough parameters");
+		return;
+	}
+
+	std::istringstream iss(args);
+	std::string chanGroup, keyGroup;
+	iss >> chanGroup >> keyGroup;
+
+	std::vector<std::string> chans = splitComma(chanGroup);
+	std::vector<std::string> keys = splitComma(keyGroup);
+
+	for (size_t i = 0; i < chans.size(); ++i)
+	{
+		std::string key = (i < keys.size()) ? keys[i] : "";
+		joinOneChannel(sess, chans[i], key);
+	}
+}
+
 void IRCCore::cmdPart(Session& sess, const std::string& args)
 {
 	if (args.empty())
@@ -98,38 +117,43 @@ void IRCCore::cmdPart(Session& sess, const std::string& args)
 		return;
 	}
 
-	std::string roomLabel = args;
+	std::string chanGroup = args;
 	std::string reason = "";
 	size_t sp = args.find(' ');
 	if (sp != std::string::npos)
 	{
-		roomLabel = args.substr(0, sp);
+		chanGroup = args.substr(0, sp);
 		reason = args.substr(sp + 1);
 		if (!reason.empty() && reason[0] == ':')
 			reason = reason.substr(1);
 	}
 
-	Room* room = requireRoom(sess, roomLabel, false);
-	if (!room)
-		return;
+	std::vector<std::string> chans = splitComma(chanGroup);
 
-	std::string partLine = buildPrefix(sess) + " PART " + roomLabel;
-	if (!reason.empty())
-		partLine += " :" + reason;
-	partLine += "\r\n";
-
-	room->relayAll(partLine);
-	room->eraseUser(&sess);
-
-	if (room->getUserList().empty())
+	for (size_t i = 0; i < chans.size(); ++i)
 	{
-		_rooms.erase(roomLabel);
-		delete room;
-		std::cout << "[CHANNEL] Deleted: " << roomLabel << std::endl;
-	}
+		Room* room = requireRoom(sess, chans[i], false);
+		if (!room)
+			continue;
 
-	std::cout << "[PART] " << sess.getNick() << " left "
-		<< roomLabel << std::endl;
+		std::string partLine = buildPrefix(sess) + " PART " + chans[i];
+		if (!reason.empty())
+			partLine += " :" + reason;
+		partLine += "\r\n";
+
+		room->relayAll(partLine);
+		room->eraseUser(&sess);
+
+		if (room->getUserList().empty())
+		{
+			_rooms.erase(chans[i]);
+			delete room;
+			std::cout << "[CHANNEL] Deleted: " << chans[i] << std::endl;
+		}
+
+		std::cout << "[PART] " << sess.getNick() << " left "
+			<< chans[i] << std::endl;
+	}
 }
 
 void IRCCore::cmdNames(Session& sess, const std::string& args)
