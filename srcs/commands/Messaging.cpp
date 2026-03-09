@@ -73,7 +73,6 @@ void IRCCore::cmdPrivmsg(Session& sess, const std::string& args)
 				continue;
 			}
 			enqueueReply(*dest, fullMsg);
-			enqueueReply(sess, fullMsg);
 		}
 	}
 }
