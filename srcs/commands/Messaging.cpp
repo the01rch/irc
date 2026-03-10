@@ -1,16 +1,4 @@
 #include "IRCCore.hpp"
-#include <sstream>
-
-static std::vector<std::string> splitComma(const std::string& s)
-{
-	std::vector<std::string> tokens;
-	std::string token;
-	std::istringstream stream(s);
-	while (std::getline(stream, token, ','))
-		if (!token.empty())
-			tokens.push_back(token);
-	return tokens;
-}
 
 void IRCCore::cmdPrivmsg(Session& sess, const std::string& args)
 {

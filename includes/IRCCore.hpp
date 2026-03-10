@@ -38,6 +38,7 @@ class IRCCore {
         std::string buildPrefix(Session& sess);
         void refreshPollFlags(int fd);
         void flushRoomBuffers(Room* room, Session* except);
+        std::vector<std::string> splitComma(const std::string& s);
 
         // Parsing
         std::string parseVerb(const std::string& raw);

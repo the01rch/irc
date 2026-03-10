@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <iostream>
 #include <cctype>
+#include <sstream>
 
 void IRCCore::enqueueReply(Session& sess, const std::string& message)
 {
@@ -184,4 +185,17 @@ void IRCCore::cmdPing(Session& sess, const std::string& args)
 		return;
 	}
 	enqueueReply(sess, ":" + _hostname + " PONG " + _hostname + " :" + args);
+}
+
+std::vector<std::string> IRCCore::splitComma(const std::string& s)
+{
+
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream stream(s);
+	std::cout << s << std::endl;
+    while (std::getline(stream, token, ','))
+        if (!token.empty())
+            tokens.push_back(token);
+    return tokens;
 }

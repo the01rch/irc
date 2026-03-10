@@ -1,18 +1,7 @@
 #include "IRCCore.hpp"
 #include <iostream>
-#include <sstream>
 #include <cstdlib>
-
-static std::vector<std::string> splitComma(const std::string& s)
-{
-	std::vector<std::string> tokens;
-	std::string token;
-	std::istringstream stream(s);
-	while (std::getline(stream, token, ','))
-		if (!token.empty())
-			tokens.push_back(token);
-	return tokens;
-}
+#include <sstream>
 
 void IRCCore::cmdKick(Session& sess, const std::string& args)
 {
